@@ -1,0 +1,412 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  ADMIN
+}
+
+enum PropertyStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum PropertyContactRole {
+  OWNER
+  CO_OWNER
+  AUTHORIZED_REPRESENTATIVE
+}
+
+enum AreaUnit {
+  SQUARE_METER
+  DUNUM
+  OTHER
+}
+
+enum TransactionType {
+  SALE
+  RENT
+}
+
+enum OfferingStatus {
+  AVAILABLE
+  RESERVED
+  UNDER_NEGOTIATION
+  SOLD
+  RENTED
+  WITHDRAWN
+}
+
+enum RentalPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+  OTHER
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  VISIT_SCHEDULED
+  NEGOTIATING
+  CLOSED_WON
+  CLOSED_LOST
+  NO_RESPONSE
+}
+
+enum InquiryChannel {
+  PHONE
+  WHATSAPP
+  FACEBOOK
+  WEBSITE
+  WALK_IN
+  OTHER
+}
+
+enum VisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum SocialPostStatus {
+  DRAFT
+  READY
+  PUBLISHED
+  REMOVED
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  OTHER
+}
+
+enum PropertyEventType {
+  CREATED
+  UPDATED
+  PRICE_CHANGED
+  STATUS_CHANGED
+  OFFERING_CREATED
+  OFFERING_CLOSED
+  NOTE_ADDED
+}
+
+// ==========================================
+// USERS
+// ==========================================
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  fullName     String   @map("full_name")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(ADMIN)
+  isActive     Boolean  @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ==========================================
+// PROPERTY TYPES
+// ==========================================
+
+model PropertyType {
+  id       String  @id @default(uuid()) @db.Uuid
+  code     String  @unique
+  nameAr   String  @map("name_ar")
+  nameEn   String  @map("name_en")
+  isActive Boolean @default(true) @map("is_active")
+
+  properties Property[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("property_types")
+}
+
+// ==========================================
+// PROPERTIES
+// ==========================================
+
+model Property {
+  id String @id @default(uuid()) @db.Uuid
+
+  title       String
+  description String?
+
+  typeId String       @map("type_id") @db.Uuid
+  type   PropertyType @relation(fields: [typeId], references: [id])
+
+  // Building -> Apartments / Shops
+  parentPropertyId String?    @map("parent_property_id") @db.Uuid
+  parentProperty   Property?  @relation("PropertyHierarchy", fields: [parentPropertyId], references: [id], onDelete: SetNull)
+  childProperties  Property[] @relation("PropertyHierarchy")
+
+  city      String
+  address   String?
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  // Preserve original area and normalized area
+  areaValue          Decimal?  @map("area_value") @db.Decimal(12, 2)
+  areaUnit           AreaUnit? @map("area_unit")
+  areaUnitLabel      String?   @map("area_unit_label")
+  areaInSquareMeters Decimal?  @map("area_in_square_meters") @db.Decimal(14, 2)
+
+  status PropertyStatus @default(DRAFT)
+
+  events    PropertyEvent[]
+  offerings PropertyOffering[]
+  contacts  PropertyContact[]
+  photos    PropertyPhoto[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([typeId])
+  @@index([status])
+  @@index([city])
+  @@index([parentPropertyId])
+  @@map("properties")
+}
+
+// ==========================================
+// CONTACTS
+// ==========================================
+
+model Contact {
+  id String @id @default(uuid()) @db.Uuid
+
+  fullName         String  @map("full_name")
+  phone            String
+  alternativePhone String? @map("alternative_phone")
+  email            String?
+  notes            String?
+
+  properties PropertyContact[]
+  inquiries  Inquiry[]
+  visits     PropertyVisit[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([phone])
+  @@map("contacts")
+}
+
+// ==========================================
+// PROPERTY CONTACTS
+// ==========================================
+
+model PropertyContact {
+  id String @id @default(uuid()) @db.Uuid
+
+  propertyId String @map("property_id") @db.Uuid
+  contactId  String @map("contact_id") @db.Uuid
+
+  role          PropertyContactRole
+  isPrimary     Boolean             @default(false) @map("is_primary")
+  canSharePhone Boolean             @default(false) @map("can_share_phone")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([propertyId, contactId, role])
+  @@index([contactId])
+  @@map("property_contacts")
+}
+
+// ==========================================
+// PROPERTY OFFERINGS
+// ==========================================
+
+model PropertyOffering {
+  id String @id @default(uuid()) @db.Uuid
+
+  propertyId String   @map("property_id") @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  transactionType TransactionType @map("transaction_type")
+
+  ownerPrice      Decimal @map("owner_price") @db.Decimal(12, 2)
+  advertisedPrice Decimal @map("advertised_price") @db.Decimal(12, 2)
+  currency        String  @default("JOD")
+
+  rentalPeriod RentalPeriod? @map("rental_period")
+
+  allowNegotiation Boolean @default(true) @map("allow_negotiation")
+
+  status OfferingStatus @default(AVAILABLE)
+
+  inquiries   Inquiry[]
+  visits      PropertyVisit[]
+  socialPosts SocialPost[]
+  events      PropertyEvent[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([propertyId])
+  @@index([transactionType, status])
+  @@map("property_offerings")
+}
+
+// ==========================================
+// PROPERTY PHOTOS
+// ==========================================
+
+model PropertyPhoto {
+  id String @id @default(uuid()) @db.Uuid
+
+  propertyId String   @map("property_id") @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  storageKey String  @map("storage_key")
+  fileName   String  @map("file_name")
+  mimeType   String? @map("mime_type")
+  sizeBytes  Int?    @map("size_bytes")
+
+  sortOrder Int     @default(0) @map("sort_order")
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([propertyId, sortOrder])
+  @@map("property_photos")
+}
+
+// ==========================================
+// INQUIRIES
+// ==========================================
+
+model Inquiry {
+  id String @id @default(uuid()) @db.Uuid
+
+  offeringId String  @map("offering_id") @db.Uuid
+  contactId  String? @map("contact_id") @db.Uuid
+
+  offering PropertyOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  contact  Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  channel InquiryChannel
+  status  InquiryStatus  @default(NEW)
+
+  message    String?
+  notes      String?
+  followUpAt DateTime? @map("follow_up_at")
+
+  visits PropertyVisit[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([offeringId])
+  @@index([contactId])
+  @@index([status, followUpAt])
+  @@map("inquiries")
+}
+
+// ==========================================
+// PROPERTY VISITS
+// ==========================================
+
+model PropertyVisit {
+  id String @id @default(uuid()) @db.Uuid
+
+  offeringId String  @map("offering_id") @db.Uuid
+  inquiryId  String? @map("inquiry_id") @db.Uuid
+  contactId  String? @map("contact_id") @db.Uuid
+
+  offering PropertyOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  inquiry  Inquiry?         @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  contact  Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  scheduledAt DateTime    @map("scheduled_at")
+  status      VisitStatus @default(SCHEDULED)
+  notes       String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([offeringId])
+  @@index([inquiryId])
+  @@index([contactId])
+  @@index([scheduledAt, status])
+  @@map("property_visits")
+}
+
+// ==========================================
+// SOCIAL POSTS
+// ==========================================
+
+model SocialPost {
+  id         String @id @default(uuid()) @db.Uuid
+  offeringId String @map("offering_id") @db.Uuid
+
+  offering PropertyOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+
+  platform SocialPlatform   @default(FACEBOOK)
+  status   SocialPostStatus @default(DRAFT)
+
+  content String
+
+  postUrl      String?   @map("post_url")
+  publishedAt  DateTime? @map("published_at")
+  lastCopiedAt DateTime? @map("last_copied_at")
+  copyCount    Int       @default(0) @map("copy_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([offeringId])
+  @@index([status])
+  @@index([platform, status])
+  @@map("social_posts")
+}
+
+// ==========================================
+// PROPERTY EVENTS
+// ==========================================
+
+model PropertyEvent {
+  id         String  @id @default(uuid()) @db.Uuid
+  propertyId String  @map("property_id") @db.Uuid
+  offeringId String? @map("offering_id") @db.Uuid
+
+  property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  offering PropertyOffering? @relation(fields: [offeringId], references: [id], onDelete: SetNull)
+
+  eventType PropertyEventType @map("event_type")
+
+  title       String
+  description String?
+
+  oldPrice Decimal? @map("old_price") @db.Decimal(12, 2)
+  newPrice Decimal? @map("new_price") @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([propertyId, createdAt])
+  @@index([offeringId, createdAt])
+  @@index([eventType])
+  @@map("property_events")
+}
