@@ -10,13 +10,36 @@ type CreatePropertyRecord = CreatePropertyInput & {
 };
 
 export async function createPropertyRepository(data: CreatePropertyRecord) {
-  const { initialContact, offering, areaInSquareMeters, ...propertyData } =
-    data;
+  const {
+    initialContact,
+    offering,
+    areaInSquareMeters,
+    typeId,
+    cityId,
+    parentPropertyId,
+    ...propertyData
+  } = data;
 
   return prisma.property.create({
     data: {
       ...propertyData,
       areaInSquareMeters,
+
+      type: {
+        connect: { id: typeId },
+      },
+
+      city: {
+        connect: { id: cityId },
+      },
+
+      ...(parentPropertyId
+        ? {
+            parentProperty: {
+              connect: { id: parentPropertyId },
+            },
+          }
+        : {}),
 
       contacts: {
         create: {
@@ -50,30 +73,82 @@ export async function createPropertyRepository(data: CreatePropertyRecord) {
         },
       },
     },
+
     include: {
       type: true,
+      city: {
+        include: {
+          governorate: true,
+        },
+      },
+      parentProperty: {
+        include: {
+          type: true,
+        },
+      },
       contacts: {
-        include: { contact: true },
+        include: {
+          contact: true,
+        },
       },
       offerings: true,
+      photos: {
+        orderBy: {
+          sortOrder: "asc",
+        },
+      },
     },
   });
 }
 
 export async function findPropertiesRepository(filters: PropertyFilters) {
-  const { search, typeId, city, status, page = 1, limit = 10 } = filters;
+  const { search, typeId, cityId, status, page = 1, limit = 10 } = filters;
 
   const where = {
     ...(typeId && { typeId }),
-    ...(city && {
-      city: { contains: city, mode: "insensitive" as const },
-    }),
+    ...(cityId && { cityId }),
     ...(status && { status }),
+
     ...(search && {
       OR: [
-        { title: { contains: search, mode: "insensitive" as const } },
-        { city: { contains: search, mode: "insensitive" as const } },
-        { address: { contains: search, mode: "insensitive" as const } },
+        {
+          title: {
+            contains: search,
+            mode: "insensitive" as const,
+          },
+        },
+        {
+          description: {
+            contains: search,
+            mode: "insensitive" as const,
+          },
+        },
+        {
+          city: {
+            is: {
+              nameAr: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
+            },
+          },
+        },
+        {
+          city: {
+            is: {
+              nameEn: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
+            },
+          },
+        },
+        {
+          address: {
+            contains: search,
+            mode: "insensitive" as const,
+          },
+        },
         {
           contacts: {
             some: {
@@ -106,18 +181,39 @@ export async function findPropertiesRepository(filters: PropertyFilters) {
       where,
       include: {
         type: true,
-        offerings: true,
+        city: {
+          include: {
+            governorate: true,
+          },
+        },
+        parentProperty: {
+          include: {
+            type: true,
+          },
+        },
+        offerings: {
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
         contacts: {
-          include: { contact: true },
+          include: {
+            contact: true,
+          },
         },
         photos: {
-          orderBy: { sortOrder: "asc" },
+          orderBy: {
+            sortOrder: "asc",
+          },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: {
+        createdAt: "desc",
+      },
       skip: (page - 1) * limit,
       take: limit,
     }),
+
     prisma.property.count({ where }),
   ]);
 
@@ -137,23 +233,57 @@ export async function findPropertyByIdRepository(id: string) {
     where: { id },
     include: {
       type: true,
+
+      city: {
+        include: {
+          governorate: true,
+        },
+      },
+
       parentProperty: {
-        include: { type: true },
+        include: {
+          type: true,
+          city: {
+            include: {
+              governorate: true,
+            },
+          },
+        },
       },
+
       childProperties: {
-        include: { type: true },
+        include: {
+          type: true,
+          city: {
+            include: {
+              governorate: true,
+            },
+          },
+        },
       },
+
       contacts: {
-        include: { contact: true },
+        include: {
+          contact: true,
+        },
       },
+
       offerings: {
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+          createdAt: "desc",
+        },
       },
+
       photos: {
-        orderBy: { sortOrder: "asc" },
+        orderBy: {
+          sortOrder: "asc",
+        },
       },
+
       events: {
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+          createdAt: "desc",
+        },
       },
     },
   });
@@ -165,17 +295,59 @@ export async function updatePropertyRepository(
     areaInSquareMeters?: number | null;
   },
 ) {
+  const { typeId, cityId, parentPropertyId, ...propertyData } = data;
+
   return prisma.property.update({
     where: { id },
-    data,
+
+    data: {
+      ...propertyData,
+
+      ...(typeId !== undefined && {
+        type: {
+          connect: { id: typeId },
+        },
+      }),
+
+      ...(cityId !== undefined && {
+        city: {
+          connect: { id: cityId },
+        },
+      }),
+
+      ...(parentPropertyId !== undefined && {
+        parentProperty: parentPropertyId
+          ? {
+              connect: { id: parentPropertyId },
+            }
+          : {
+              disconnect: true,
+            },
+      }),
+    },
+
     include: {
       type: true,
+      city: {
+        include: {
+          governorate: true,
+        },
+      },
+      parentProperty: {
+        include: {
+          type: true,
+        },
+      },
       contacts: {
-        include: { contact: true },
+        include: {
+          contact: true,
+        },
       },
       offerings: true,
       photos: {
-        orderBy: { sortOrder: "asc" },
+        orderBy: {
+          sortOrder: "asc",
+        },
       },
     },
   });
@@ -184,7 +356,9 @@ export async function updatePropertyRepository(
 export async function archivePropertyRepository(id: string) {
   return prisma.property.update({
     where: { id },
-    data: { status: "ARCHIVED" },
+    data: {
+      status: "ARCHIVED",
+    },
   });
 }
 
@@ -196,6 +370,7 @@ export async function propertyExistsRepository(id: string) {
       status: true,
       areaValue: true,
       areaUnit: true,
+      cityId: true,
     },
   });
 }
@@ -203,6 +378,20 @@ export async function propertyExistsRepository(id: string) {
 export async function propertyTypeExistsRepository(id: string) {
   return prisma.propertyType.findUnique({
     where: { id },
-    select: { id: true, isActive: true },
+    select: {
+      id: true,
+      isActive: true,
+    },
+  });
+}
+
+export async function cityExistsRepository(id: string) {
+  return prisma.city.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      isActive: true,
+      governorateId: true,
+    },
   });
 }

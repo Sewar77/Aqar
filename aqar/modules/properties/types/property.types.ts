@@ -11,7 +11,7 @@ export type UpdatePropertyInput = z.infer<typeof updatePropertySchema>;
 export type PropertyFilters = {
   search?: string;
   typeId?: string;
-  city?: string;
+  cityId?: string;
   status?: "DRAFT" | "ACTIVE" | "ARCHIVED";
   page?: number;
   limit?: number;

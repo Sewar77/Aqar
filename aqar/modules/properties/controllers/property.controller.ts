@@ -85,7 +85,7 @@ export async function getPropertiesController(request: Request) {
     const result = await getProperties({
       search: searchParams.get("search") ?? undefined,
       typeId: searchParams.get("typeId") ?? undefined,
-      city: searchParams.get("city") ?? undefined,
+      cityId: searchParams.get("city") ?? undefined,
       status:
         (searchParams.get("status") as
           | "DRAFT"

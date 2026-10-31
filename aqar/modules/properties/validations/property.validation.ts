@@ -7,7 +7,7 @@ export const createPropertySchema = z.object({
   typeId: z.string().uuid(),
   parentPropertyId: z.string().uuid().nullable().optional(),
 
-  city: z.string().trim().min(1),
+  cityId: z.string().trim().min(1),
   address: z.string().trim().optional(),
 
   latitude: z.number().min(-90).max(90).nullable().optional(),
@@ -45,7 +45,7 @@ export const updatePropertySchema = z.object({
   typeId: z.string().uuid().optional(),
   parentPropertyId: z.string().uuid().nullable().optional(),
 
-  city: z.string().trim().min(1).optional(),
+  cityId: z.string().trim().min(1).optional(),
   address: z.string().trim().nullable().optional(),
 
   latitude: z.number().min(-90).max(90).nullable().optional(),
