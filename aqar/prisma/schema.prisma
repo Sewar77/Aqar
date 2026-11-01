@@ -132,7 +132,7 @@ model Property {
   events             PropertyEvent[]
   createdAt          DateTime       @default(now()) @map("created_at") // registration timestamp
   updatedAt          DateTime       @updatedAt @map("updated_at")
-
+details Json @default("{}")
   @@index([locationId, status])
   @@index([typeId])
   @@index([parentPropertyId])
@@ -226,4 +226,10 @@ model PropertyEvent {
 
   @@index([propertyId, createdAt])
   @@map("property_events")
+}
+
+model PropertyCodeCounter {
+  id Int @id @default(autoincrement())
+
+  @@map("property_code_counters")
 }
