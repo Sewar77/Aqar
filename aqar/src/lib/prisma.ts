@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaClient } from "../../generated/prisma/client";
+
 // prismaclient allows us to query the database
 // prismapg connect the postegresql using pg driver adapter.
 const connectionString = process.env.DATABASE_URL;

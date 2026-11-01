@@ -1,4 +1,4 @@
-import { locationController } from "@/src/modules/locations/location.controller";
+import { locationController } from "@/modules/locations/location.controller";
 
 type RouteContext = {
   params: Promise<{ id: string }>;

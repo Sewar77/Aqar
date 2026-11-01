@@ -1,4 +1,4 @@
-import { contactController } from "@/src/modules/contacts/contact.controller";
+import { contactController } from "@/modules/contacts/contact.controller";
 
 export async function GET(request: Request) {
   return contactController.getAll(request);

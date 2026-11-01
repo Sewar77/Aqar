@@ -4,7 +4,7 @@ import {
   CreateContactInput,
   UpdateContactInput,
 } from "./contact.types";
-
+import type { Contact } from "../../../generated/prisma/client";
 export class ContactServiceError extends Error {
   constructor(
     message: string,
@@ -14,6 +14,11 @@ export class ContactServiceError extends Error {
     this.name = "ContactServiceError";
   }
 }
+type ContactPropertyRelationship = {
+  property: {
+    id: string;
+  };
+};
 export const contactService = {
   async getAll(filters: ContactListFilter) {
     const [contacts, total] = await Promise.all([
@@ -22,10 +27,10 @@ export const contactService = {
     ]);
 
     const counts = await contactRepository.countDistinctProperties(
-      contacts.map((contact) => contact.id),
+      contacts.map((contact: Contact) => contact.id),
     );
 
-    const data = contacts.map((contact) => ({
+    const data = contacts.map((contact: Contact) => ({
       ...contact,
       propertyCount: counts.get(contact.id) ?? 0,
     }));
@@ -49,7 +54,9 @@ export const contactService = {
     }
 
     const propertyCount = new Set(
-      contact.properties.map((relationship) => relationship.property.id),
+      contact.properties.map(
+        (relationship: ContactPropertyRelationship) => relationship.property.id,
+      ),
     ).size;
 
     return {

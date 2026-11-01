@@ -1,4 +1,4 @@
-import { contactController } from "@/src/modules/contacts/contact.controller";
+import { contactController } from "@/modules/contacts/contact.controller";
 
 type RouteContext = {
   params: Promise<{

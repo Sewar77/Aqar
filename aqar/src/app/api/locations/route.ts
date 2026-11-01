@@ -1,4 +1,4 @@
-import { locationController } from "@/src/modules/locations/location.controller";
+import { locationController } from "@/modules/locations/location.controller";
 
 export async function GET(request: Request) {
   return locationController.getAll(request);
