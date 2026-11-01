@@ -143,7 +143,7 @@ model Property {
 model Contact {
   id               String   @id @default(uuid()) @db.Uuid
   fullName         String   @map("full_name")
-  phone            String
+  phone            String @unique
   alternativePhone String?  @map("alternative_phone")
   email            String?
   notes            String?
@@ -151,7 +151,7 @@ model Contact {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
-  @@index([phone])
+ 
   @@index([fullName])
   @@map("contacts")
 }
