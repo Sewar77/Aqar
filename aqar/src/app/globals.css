@@ -1,38 +1,457 @@
 @import "tailwindcss";
 
-@import "tailwindcss";
+/*
+ * ====================================================
+ * AQAR DESIGN SYSTEM
+ * Theme: Warm Olive & Sand
+ * Direction: RTL
+ * Audience: Comfortable, accessible daily usage
+ * ====================================================
+ */
 
 :root {
-  --background: #f7f8f6;
-  --foreground: #172b24;
-  --primary: #195a46;
-  --primary-hover: #124635;
-  --border: #e3e8e4;
-  --muted: #68786f;
+  color-scheme: light;
+
+  /* --------------------------------
+   * 1. Backgrounds & Surfaces
+   * -------------------------------- */
+
+  --background: #f8f6f0;
+  --foreground: #27352b;
+
+  --surface: #fffefb;
+  --surface-muted: #f3f1e9;
+  --surface-hover: #eeefe6;
+
+  /* --------------------------------
+   * 2. Brand Colors
+   * -------------------------------- */
+
+  --primary: #346747;
+  --primary-hover: #285238;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e4eddf;
+
+  --olive: #627b51;
+  --olive-soft: #dce5d4;
+
+  --accent: #c1a66e;
+  --accent-soft: #f3ecda;
+
+  /* --------------------------------
+   * 3. Text Colors
+   * -------------------------------- */
+
+  --text-primary: #27352b;
+  --text-secondary: #59665d;
+  --text-muted: #758078;
+
+  /* --------------------------------
+   * 4. Borders & Shadows
+   * -------------------------------- */
+
+  --border: #e9e7de;
+  --border-soft: #f0eee7;
+
+  --shadow-sm: 0 2px 10px rgb(42 53 39 / 4%);
+
+  --shadow-md: 0 5px 22px rgb(42 53 39 / 6%);
+
+  --shadow-lg: 0 12px 35px rgb(42 53 39 / 9%);
+
+  /* --------------------------------
+   * 5. Semantic Action Colors
+   * -------------------------------- */
+
+  /* Save / Activate / Success */
+  --success: #346747;
+  --success-soft: #e5f1e5;
+
+  /* Edit */
+  --edit: #8a661c;
+  --edit-soft: #f9efd2;
+
+  /* Delete */
+  --danger: #af3434;
+  --danger-soft: #fbe8e6;
+
+  /* Archive */
+  --archive: #647064;
+  --archive-soft: #e9ebe5;
+
+  /* Inactive */
+  --inactive: #727a73;
+  --inactive-soft: #eceee9;
+
+  /* Information / Details */
+  --info: #426c76;
+  --info-soft: #e4eff0;
+
+  /* --------------------------------
+   * 6. Shape & Spacing
+   * -------------------------------- */
+
+  --radius: 1rem;
+
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
+
+  /* --------------------------------
+   * 7. Typography
+   * -------------------------------- */
+
+  --font-aqar: var(--font-aqar-arabic), Tahoma, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
+/*
+ * ====================================================
+ * TAILWIND CSS V4 TOKENS
+ * ====================================================
+ */
+
+@theme inline {
+  /* Base */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-page: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-hover: var(--surface-hover);
+
+  /* Brand */
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-brand: var(--primary);
+  --color-brand-hover: var(--primary-hover);
+  --color-brand-soft: var(--primary-soft);
+
+  --color-olive: var(--olive);
+  --color-olive-soft: var(--olive-soft);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
+  /* Typography */
+  --color-ink: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+
+  /* Borders */
+  --color-line: var(--border);
+  --color-line-soft: var(--border-soft);
+
+  /* Actions */
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+
+  --color-edit: var(--edit);
+  --color-edit-soft: var(--edit-soft);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --color-archive: var(--archive);
+  --color-archive-soft: var(--archive-soft);
+
+  --color-inactive: var(--inactive);
+  --color-inactive-soft: var(--inactive-soft);
+
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  /* Font */
+  --font-sans: var(--font-aqar);
+
+  /* Rounded corners */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 }
 
-html {
-  direction: rtl;
+/*
+ * ====================================================
+ * GLOBAL BASE STYLES
+ * ====================================================
+ */
+
+@layer base {
+  html {
+    direction: rtl;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+
+    background: var(--background);
+    color: var(--foreground);
+
+    font-family: var(--font-aqar);
+    font-size: 16px;
+    line-height: 1.8;
+
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: var(--olive-soft);
+    color: var(--foreground);
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, sans-serif;
+/*
+ * ====================================================
+ * REUSABLE COMPONENT STYLES
+ *
+ * Apply these classes explicitly.
+ * Avoid styling all cards/buttons globally.
+ * ====================================================
+ */
+
+@layer components {
+  /* Main content area */
+  .aqar-page {
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  /* Clean elevated surface */
+  .aqar-surface {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Property cards and large panels */
+  .aqar-card {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .aqar-card:hover {
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Lightweight list rows */
+  .aqar-list-row {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.125rem 1.5rem;
+
+    transition:
+      background 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .aqar-list-row:hover {
+    background: #fcfbf6;
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Input fields */
+  .aqar-input {
+    width: 100%;
+    min-height: 48px;
+    padding: 0.75rem 1rem;
+
+    background: var(--surface);
+    color: var(--foreground);
+
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+
+    outline: none;
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .aqar-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+  }
+
+  .aqar-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  /* Base button */
+  .aqar-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+
+    min-height: 46px;
+    padding: 0.625rem 1.25rem;
+
+    border: 0;
+    border-radius: var(--radius-md);
+
+    font-weight: 700;
+    font-size: 0.9375rem;
+
+    transition:
+      background 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  /* Primary / Save */
+  .aqar-button-primary {
+    background: var(--primary);
+    color: #ffffff;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .aqar-button-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+
+  /* Edit */
+  .aqar-button-edit {
+    background: var(--edit-soft);
+    color: var(--edit);
+  }
+
+  .aqar-button-edit:hover:not(:disabled) {
+    background: #f3e3b5;
+  }
+
+  /* Delete */
+  .aqar-button-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  .aqar-button-danger:hover:not(:disabled) {
+    background: #f7d8d5;
+  }
+
+  /* Archive */
+  .aqar-button-archive {
+    background: var(--archive-soft);
+    color: var(--archive);
+  }
+
+  /* Subtle button */
+  .aqar-button-soft {
+    background: var(--olive-soft);
+    color: var(--foreground);
+  }
+
+  .aqar-button-soft:hover:not(:disabled) {
+    background: #cedbc4;
+  }
+
+  /* Status badges */
+  .aqar-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+
+    font-size: 0.8125rem;
+    font-weight: 700;
+  }
+
+  .aqar-badge-active {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  .aqar-badge-inactive {
+    background: var(--inactive-soft);
+    color: var(--inactive);
+  }
+
+  .aqar-badge-archived {
+    background: var(--archive-soft);
+    color: var(--archive);
+  }
+
+  /* Dialog appearance */
+  .aqar-dialog {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Section headings */
+  .aqar-heading {
+    color: var(--foreground);
+    font-weight: 800;
+    line-height: 1.4;
+    letter-spacing: 0;
+  }
+
+  .aqar-description {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.9;
+  }
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+/*
+ * ====================================================
+ * RESPONSIVE COMFORT
+ * ====================================================
+ */
+
+@media (max-width: 640px) {
+  .aqar-list-row {
+    padding: 1rem;
+  }
+
+  .aqar-card {
+    border-radius: var(--radius-lg);
+  }
+
+  .aqar-dialog {
+    border-radius: 0;
+  }
 }
 
-button {
-  cursor: pointer;
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

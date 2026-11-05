@@ -1,9 +1,5 @@
-export default function LocationsPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold">المناطق</h1>
+import { LocationManager } from "@/components/locations/location-manager";
 
-      <p className="mt-2 text-gray-500">سيتم إضافة إدارة المناطق هنا.</p>
-    </div>
-  );
+export default function LocationsPage() {
+  return <LocationManager />;
 }

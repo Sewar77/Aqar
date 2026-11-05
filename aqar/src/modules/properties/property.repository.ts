@@ -89,22 +89,17 @@ export const propertyRepository = {
   },
 
   async list(where: Prisma.PropertyWhereInput, page: number, limit: number) {
-    // Example: page 3, limit 10 -> skip 20 rows.
     const skip = (page - 1) * limit;
 
-    // The array transaction returns the results of
-    // these two database operations in order.
-    const [data, total] = await prisma.$transaction([
-      prisma.property.findMany({
-        where,
-        include: propertyInclude,
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
+    const data = await prisma.property.findMany({
+      where,
+      include: propertyInclude,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    });
 
-      prisma.property.count({ where }),
-    ]);
+    const total = await prisma.property.count({ where });
 
     return {
       data,

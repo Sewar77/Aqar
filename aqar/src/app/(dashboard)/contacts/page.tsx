@@ -1,9 +1,5 @@
-export default function ContactsPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold">جهات الاتصال</h1>
+import { ContactManager } from "@/components/contacts/contact-manager";
 
-      <p className="mt-2 text-gray-500">سيتم إضافة إدارة جهات الاتصال هنا.</p>
-    </div>
-  );
+export default function ContactsPage() {
+  return <ContactManager />;
 }

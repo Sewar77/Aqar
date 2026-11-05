@@ -1,172 +1,335 @@
 import { Suspense } from "react";
-import { connection } from "next/server";
 import Link from "next/link";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
 
-import { propertyRepository } from "../../../../modules/properties/property.repository";
+import {
+  ArrowRight,
+  Building2,
+  MapPin,
+  Ruler,
+  UserRound,
+} from "lucide-react";
 
-type PageProps = {
+import { propertyRepository } from "@/modules/properties/property.repository";
+
+type Props = {
   params: Promise<{
     id: string;
   }>;
 };
 
-// This component handles the request-specific database query.
-async function PropertyDetailsContent({ params }: PageProps) {
-  // Ensure the database query runs at request time.
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const numberFormatter = new Intl.NumberFormat(
+  "ar-JO",
+  {
+    maximumFractionDigits: 2,
+  },
+);
+
+const propertyStatusLabels: Record<string, string> = {
+  DRAFT: "مسودة",
+  ACTIVE: "نشط",
+  ARCHIVED: "مؤرشف",
+};
+
+const offeringStatusLabels: Record<string, string> = {
+  AVAILABLE: "متاح",
+  RESERVED: "محجوز",
+  UNDER_NEGOTIATION: "قيد التفاوض",
+  SOLD: "مباع",
+  RENTED: "مؤجر",
+  WITHDRAWN: "مسحوب",
+};
+
+const roleLabels: Record<string, string> = {
+  OWNER: "المالك",
+  CO_OWNER: "شريك في الملكية",
+  AUTHORIZED_REPRESENTATIVE: "مفوّض بالتواصل",
+};
+
+async function PropertyDetailsContent({
+  params,
+}: Props) {
   await connection();
 
   const { id } = await params;
-
-  // Validate the UUID before passing it to Prisma.
-  const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   if (!uuidPattern.test(id)) {
     notFound();
   }
 
-  const property = await propertyRepository.findById(id);
+  const property =
+    await propertyRepository.findById(id);
 
   if (!property) {
     notFound();
   }
 
+  const area =
+    property.areaValue !== null
+      ? numberFormatter.format(
+        Number(property.areaValue),
+      )
+      : null;
+
+  const areaUnit =
+    property.areaUnit === "DUNUM"
+      ? "دونم"
+      : property.areaUnit === "SQUARE_METER"
+        ? "م²"
+        : property.areaUnitLabel ?? "";
+
   return (
-    <div className="space-y-6">
-      <Link href="/properties" className="text-sm font-medium text-[#195a46]">
-        → العودة إلى العقارات
+    <section dir="rtl" className="space-y-7">
+      <Link
+        href="/properties"
+        className="inline-flex items-center gap-2 font-semibold text-brand hover:underline"
+      >
+        <ArrowRight size={18} aria-hidden="true" />
+        العودة إلى العقارات
       </Link>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-6">
-        <p className="text-sm text-gray-500">{property.propertyCode}</p>
+      {/* Property Header */}
+      <header className="aqar-card space-y-4 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="aqar-heading text-3xl">
+              {property.title}
+            </h1>
 
-        <h1 className="mt-2 text-2xl font-bold">{property.title}</h1>
+            <p className="aqar-description mt-2">
+              {property.description ??
+                "لا يوجد وصف إضافي"}
+            </p>
+          </div>
 
-        <p className="mt-3 text-sm text-gray-600">
-          {property.description ?? "لا يوجد وصف"}
-        </p>
-      </div>
+          <span className="aqar-badge aqar-badge-active">
+            {propertyStatusLabels[property.status]}
+          </span>
+        </div>
+      </header>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <section className="rounded-2xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-bold">معلومات العقار</h2>
+      {/* Basic Information */}
+      <section className="aqar-card space-y-5 p-6">
+        <h2 className="aqar-heading text-2xl">
+          معلومات العقار
+        </h2>
 
-          <dl className="space-y-3 text-sm">
+        <dl className="grid gap-5 md:grid-cols-2">
+          <div className="flex items-start gap-3">
+            <Building2
+              size={20}
+              className="text-olive"
+              aria-hidden="true"
+            />
+
             <div>
-              <dt className="text-gray-500">النوع</dt>
-              <dd>{property.type.nameAr}</dd>
-            </div>
+              <dt className="text-secondary">
+                نوع العقار
+              </dt>
 
-            <div>
-              <dt className="text-gray-500">المنطقة</dt>
-              <dd>{property.location.nameAr}</dd>
-            </div>
-
-            <div>
-              <dt className="text-gray-500">العنوان</dt>
-              <dd>{property.address ?? "غير محدد"}</dd>
-            </div>
-
-            <div>
-              <dt className="text-gray-500">المساحة</dt>
-              <dd>
-                {property.areaValue !== null
-                  ? Number(property.areaValue).toLocaleString("ar-JO")
-                  : "غير محددة"}{" "}
-                {property.areaUnit === "DUNUM"
-                  ? "دونم"
-                  : property.areaUnit === "SQUARE_METER"
-                    ? "م²"
-                    : (property.areaUnitLabel ?? "")}
+              <dd className="font-bold">
+                {property.type.nameAr}
               </dd>
             </div>
-          </dl>
-        </section>
+          </div>
 
-        <section className="rounded-2xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-bold">جهات الاتصال</h2>
+          <div className="flex items-start gap-3">
+            <MapPin
+              size={20}
+              className="text-olive"
+              aria-hidden="true"
+            />
 
-          <div className="space-y-4">
-            {property.contacts.map((relationship) => (
-              <div key={relationship.id} className="rounded-xl bg-gray-50 p-4">
-                <p className="font-semibold">{relationship.contact.fullName}</p>
+            <div>
+              <dt className="text-secondary">
+                المنطقة
+              </dt>
 
-                <p className="mt-1 text-sm text-gray-600" dir="ltr">
-                  {relationship.contact.phone}
+              <dd>
+                <Link
+                  href={`/locations/${property.location.id}`}
+                  className="font-bold text-brand hover:underline"
+                >
+                  {property.location.nameAr}
+                </Link>
+              </dd>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Ruler
+              size={20}
+              className="text-olive"
+              aria-hidden="true"
+            />
+
+            <div>
+              <dt className="text-secondary">
+                المساحة
+              </dt>
+
+              <dd className="font-bold">
+                {area
+                  ? `${area} ${areaUnit}`
+                  : "غير محددة"}
+              </dd>
+            </div>
+          </div>
+
+          {property.address && (
+            <div>
+              <dt className="text-secondary">
+                العنوان
+              </dt>
+
+              <dd className="font-bold">
+                {property.address}
+              </dd>
+            </div>
+          )}
+        </dl>
+      </section>
+
+      {/* Contacts */}
+      <section className="aqar-card space-y-5 p-6">
+        <div className="flex items-center gap-3">
+          <UserRound
+            size={23}
+            className="text-olive"
+            aria-hidden="true"
+          />
+
+          <h2 className="aqar-heading text-2xl">
+            جهات الاتصال
+          </h2>
+        </div>
+
+        {property.contacts.length === 0 ? (
+          <p className="text-secondary">
+            لا توجد جهات اتصال مرتبطة.
+          </p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {property.contacts.map((relation) => (
+              <Link
+                key={relation.id}
+                href={`/contacts/${relation.contact.id}`}
+                className="rounded-2xl bg-surface-muted p-5 transition-colors hover:bg-olive-soft"
+              >
+                <h3 className="text-lg font-bold text-ink">
+                  {relation.contact.fullName}
+                </h3>
+
+                <p
+                  dir="ltr"
+                  className="mt-2 text-right text-secondary"
+                >
+                  {relation.contact.phone}
                 </p>
 
-                <p className="mt-1 text-xs text-gray-500">
-                  {relationship.role === "OWNER"
-                    ? "المالك"
-                    : relationship.role === "CO_OWNER"
-                      ? "شريك في الملكية"
-                      : "مفوّض بالتواصل"}
+                <p className="mt-2 text-sm font-semibold text-brand">
+                  {roleLabels[relation.role]}
                 </p>
-              </div>
+
+                <p className="mt-3 text-sm text-secondary">
+                  عرض جميع العقارات المرتبطة
+                </p>
+              </Link>
             ))}
           </div>
-        </section>
+        )}
+      </section>
 
-        <section className="rounded-2xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-bold">عروض البيع والإيجار</h2>
+      {/* Offerings */}
+      <section className="aqar-card space-y-5 p-6">
+        <h2 className="aqar-heading text-2xl">
+          عروض البيع والإيجار
+        </h2>
 
-          <div className="space-y-4">
+        {property.offerings.length === 0 ? (
+          <p className="text-secondary">
+            لا توجد عروض مسجلة.
+          </p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
             {property.offerings.map((offering) => (
-              <div key={offering.id} className="rounded-xl bg-gray-50 p-4">
-                <p className="font-semibold">
-                  {offering.transactionType === "SALE" ? "للبيع" : "للإيجار"}
+              <article
+                key={offering.id}
+                className="rounded-2xl bg-surface-muted p-5"
+              >
+                <div className="flex flex-wrap justify-between gap-3">
+                  <h3 className="font-bold text-ink">
+                    {offering.transactionType === "SALE"
+                      ? "للبيع"
+                      : "للإيجار"}
+                  </h3>
+
+                  <span className="aqar-badge aqar-badge-active">
+                    {offeringStatusLabels[
+                      offering.status
+                    ]}
+                  </span>
+                </div>
+
+                <p className="mt-4 text-sm text-secondary">
+                  سعر الإعلان
                 </p>
 
-                <p className="mt-2 text-sm">
+                <p className="mt-1 text-2xl font-extrabold text-brand">
+                  {numberFormatter.format(
+                    Number(offering.advertisedPrice),
+                  )}{" "}
+                  د.أ
+                </p>
+
+                <p className="mt-3 text-sm text-secondary">
                   سعر المالك:{" "}
-                  {Number(offering.ownerPrice).toLocaleString("ar-JO")} د.أ
+                  {numberFormatter.format(
+                    Number(offering.ownerPrice),
+                  )}{" "}
+                  د.أ
                 </p>
-
-                <p className="text-sm font-bold text-[#195a46]">
-                  سعر الإعلان:{" "}
-                  {Number(offering.advertisedPrice).toLocaleString("ar-JO")} د.أ
-                </p>
-              </div>
+              </article>
             ))}
           </div>
-        </section>
+        )}
+      </section>
 
-        <section className="rounded-2xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-bold">ملاحظات داخلية</h2>
+      {/* Internal Notes */}
+      {property.internalNotes && (
+        <section className="aqar-card p-6">
+          <h2 className="aqar-heading mb-3 text-xl">
+            ملاحظات داخلية
+          </h2>
 
-          <p className="text-sm text-gray-600">
-            {property.internalNotes ?? "لا توجد ملاحظات"}
+          <p className="whitespace-pre-wrap text-secondary">
+            {property.internalNotes}
           </p>
         </section>
-      </div>
-    </div>
+      )}
+    </section>
   );
 }
 
-// The page renders immediately with a fallback.
-// The database-dependent content streams in afterward.
-export default function PropertyDetailsPage({ params }: PageProps) {
+export default function PropertyDetailsPage(
+  props: Props,
+) {
   return (
-    <Suspense fallback={<PropertyDetailsFallback />}>
-      <PropertyDetailsContent params={params} />
+    <Suspense
+      fallback={
+        <div
+          role="status"
+          className="aqar-surface p-8"
+        >
+          جارٍ تحميل تفاصيل العقار...
+        </div>
+      }
+    >
+      <PropertyDetailsContent {...props} />
     </Suspense>
-  );
-}
-
-function PropertyDetailsFallback() {
-  return (
-    <div role="status" className="space-y-5 animate-pulse">
-      <div className="h-6 w-32 rounded bg-gray-200" />
-      <div className="h-36 rounded-2xl bg-gray-200" />
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-48 rounded-2xl bg-gray-200" />
-        ))}
-      </div>
-
-      <span className="sr-only">جاري تحميل تفاصيل العقار</span>
-    </div>
   );
 }
