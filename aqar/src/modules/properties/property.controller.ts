@@ -4,6 +4,8 @@ import {
   propertyPhotoService,
 } from "./property.service";
 
+import { propertyEditService } from "./property-edit.service";
+
 import { propertyErrorResponse } from "./property.error";
 
 import {
@@ -16,9 +18,6 @@ import {
   uuidSchema,
 } from "./properties.validation";
 
-// Native Response.json() is supported by Next.js Route Handlers.
-// We don't need Express's res.json().
-
 function success(data: unknown, status = 200): Response {
   return Response.json(
     {
@@ -29,8 +28,6 @@ function success(data: unknown, status = 200): Response {
   );
 }
 
-// Validate dynamic route parameters before passing them
-// into the service or Prisma.
 function parseId(id: string): string {
   return uuidSchema.parse(id);
 }
@@ -39,10 +36,8 @@ export const propertyController = {
   // GET /api/properties
   async list(request: Request): Promise<Response> {
     try {
-      // Next.js provides the standard Web Request object.
       const url = new URL(request.url);
 
-      // Convert URLSearchParams into a plain object.
       const query = Object.fromEntries(url.searchParams.entries());
 
       const filters = listPropertiesQuerySchema.parse(query);
@@ -58,7 +53,9 @@ export const propertyController = {
   // GET /api/properties/:id
   async get(id: string): Promise<Response> {
     try {
-      const result = await propertyService.get(parseId(id));
+      const propertyId = parseId(id);
+
+      const result = await propertyService.get(propertyId);
 
       return success(result);
     } catch (error: unknown) {
@@ -69,10 +66,8 @@ export const propertyController = {
   // POST /api/properties
   async create(request: Request): Promise<Response> {
     try {
-      // request.json() is asynchronous.
       const body: unknown = await request.json();
 
-      // .parse() checks and transforms the body.
       const input = createPropertySchema.parse(body);
 
       const result = await propertyService.create(input);
@@ -92,7 +87,17 @@ export const propertyController = {
 
       const input = updatePropertySchema.parse(body);
 
-      const result = await propertyService.update(propertyId, input);
+      // Advanced changes to contacts, hierarchy,
+      // or new locations retain their original
+      // specialized transaction logic.
+      const complexUpdate =
+        input.contacts !== undefined ||
+        input.parentPropertyId !== undefined ||
+        (input.location !== undefined && "new" in input.location);
+
+      const result = complexUpdate
+        ? await propertyService.update(propertyId, input)
+        : await propertyEditService.updateBasic(propertyId, input);
 
       return success(result);
     } catch (error: unknown) {
@@ -131,7 +136,7 @@ export const propertyController = {
 
       const input = updateOfferingSchema.parse(body);
 
-      const result = await propertyOfferingService.update(
+      const result = await propertyEditService.updateOffering(
         propertyId,
         validOfferingId,
         input,

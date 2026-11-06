@@ -18,8 +18,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   return contactController.update(request, id);
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const { id } = await context.params;
 
-  return contactController.delete(id);
+  return contactController.delete(request, id);
 }

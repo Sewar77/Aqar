@@ -1,46 +1,85 @@
 import { z } from "zod";
+import { paginationQueryFields } from "@/lib/pagination";
+function normalizeDigits(value: string) {
+  return value
+    .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0));
+}
 
 const phoneSchema = z
   .string()
   .trim()
-  .min(7, "رقم الهاتف قصير جدًا")
-  .max(25, "رقم الهاتف طويل جدًا")
-  .regex(/^\+?[0-9][0-9\s().-]*$/, "صيغة رقم الهاتف غير صحيحة");
+  .transform((value) => normalizeDigits(value).replace(/[\s().-]/g, ""))
+  .refine((value) => /^\+?[0-9]+$/.test(value), "رقم الهاتف غير صالح")
+  .refine((value) => {
+    const digits = value.replace(/\D/g, "");
+    return digits.length >= 7 && digits.length <= 15;
+  }, "رقم الهاتف يجب أن يحتوي على 7 إلى 15 رقمًا");
+
+const optionalPhoneSchema = z.preprocess(
+  (value) => (value === "" ? null : value),
+  phoneSchema.nullable().optional(),
+);
+
+const notesSchema = z
+  .string()
+  .trim()
+  .max(2000, "الملاحظات طويلة جدًا")
+  .nullable()
+  .optional();
+
+export const contactIdSchema = z.guid();
 
 export const createContactSchema = z
   .object({
     fullName: z
       .string()
       .trim()
-      .min(2, "الاسم يجب أن يكون حرفين على الأقل")
-      .max(150, "الاسم طويل جدًا"),
+      .min(2, "الاسم يجب أن يحتوي على حرفين على الأقل")
+      .max(150, "الاسم طويل جدًا")
+      .transform((value) => value.replace(/\s+/g, " ")),
 
     phone: phoneSchema,
-
-    alternativePhone: phoneSchema.nullable().optional(),
-
-    email: z.email("البريد الإلكتروني غير صالح").trim().nullable().optional(),
-
-    notes: z
-      .string()
-      .trim()
-      .max(2000, "الملاحظات طويلة جدًا")
-      .nullable()
-      .optional(),
+    alternativePhone: optionalPhoneSchema,
+    notes: notesSchema,
   })
   .strict();
 
 export const updateContactSchema = createContactSchema
   .partial()
+  .extend({
+    isActive: z.boolean().optional(),
+  })
   .refine(
-    (data) => Object.keys(data).length > 0,
-    "يجب إرسال حقل واحد على الأقل للتعديل",
+    (value) => Object.keys(value).length > 0,
+    "يجب إدخال تعديل واحد على الأقل",
   );
 
-export const contactListQuerySchema = z.object({
-  search: z.string().trim().max(150).optional(),
+export const contactListQuerySchema = z
+  .object({
+    search: z.string().trim().max(150).optional(),
 
-  page: z.coerce.number().int().min(1).default(1),
+    isActive: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
 
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-});
+    ...paginationQueryFields,
+  })
+  .strict();
+
+export const deleteContactSchema = z
+  .object({
+    confirm: z.literal(true),
+    confirmName: z.string().trim(),
+    deleteRelatedProperties: z.literal(true),
+
+    expectedPropertyIds: z
+      .array(z.guid())
+      .max(5000)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "قائمة العقارات تحتوي على تكرار",
+      ),
+  })
+  .strict();

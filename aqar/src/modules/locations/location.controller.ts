@@ -1,39 +1,76 @@
-import { NextResponse } from "next/server";
+import { Prisma } from "../../../generated/prisma/client";
+import { ZodError } from "zod";
+
 import { LocationService, LocationServiceError } from "./location.service";
 
 import {
+  locationIdSchema,
   createLocationSchema,
   updateLocationSchema,
   locationListQuerySchema,
+  deleteLocationSchema,
 } from "./location.validators";
 
-const isValidId = (id: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-function handleError(error: unknown) {
+function handleError(error: unknown): Response {
   if (error instanceof LocationServiceError) {
-    return NextResponse.json(
-      { success: false, message: error.message },
+    return Response.json(
+      {
+        success: false,
+        message: error.message,
+      },
       { status: error.statusCode },
     );
   }
 
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "P2002"
-  ) {
-    return NextResponse.json(
+  if (error instanceof ZodError) {
+    return Response.json(
       {
         success: false,
-        message: "ههذ المنطقة مسجلة بالفعل",
+        message: "البيانات المدخلة غير صحيحة",
+        errors: error.issues.map((issue) => ({
+          path: issue.path,
+          message: issue.message,
+        })),
       },
-      { status: 409 },
+      { status: 400 },
     );
   }
-  console.error("location module error", error);
-  return NextResponse.json(
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return Response.json(
+        {
+          success: false,
+          message: "هذه المنطقة مسجلة بالفعل",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (error.code === "P2003") {
+      return Response.json(
+        {
+          success: false,
+          message: "لا يمكن حذف المنطقة لأنها مرتبطة بعقارات",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (error.code === "P2025") {
+      return Response.json(
+        {
+          success: false,
+          message: "المنطقة غير موجودة",
+        },
+        { status: 404 },
+      );
+    }
+  }
+
+  console.error("Locations API error:", error);
+
+  return Response.json(
     {
       success: false,
       message: "حدث خطأ غير متوقع في الخادم",
@@ -42,56 +79,44 @@ function handleError(error: unknown) {
   );
 }
 
-async function parseJson(request: Request) {
+async function parseJson(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch {
-    throw new LocationServiceError("البيانات المرسلة ليست JSON صالحًا", 400);
+    throw new LocationServiceError("يرجى إرسال JSON صالح", 400);
   }
 }
 
 export const locationController = {
-  async getAll(request: Request) {
+  async getAll(request: Request): Promise<Response> {
     try {
-      const { searchParams } = new URL(request.url);
-      const parsed = locationListQuerySchema.safeParse({
-        search: searchParams.get("search") ?? undefined,
-        isActive: searchParams.get("isActive") ?? undefined,
+      const params = new URL(request.url).searchParams;
+
+      const filters = locationListQuerySchema.parse({
+        search: params.get("search") ?? undefined,
+        isActive: params.get("isActive") ?? undefined,
+        page: params.get("page") ?? undefined,
+        limit: params.get("limit") ?? undefined,
       });
-      if (!parsed.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "معايير البحث غير صحيحة",
-            errors: parsed.error.flatten(),
-          },
-          { status: 400 },
-        );
-      }
-      const locations = await LocationService.getAll(parsed.data);
-      return NextResponse.json({
+
+      const result = await LocationService.getAll(filters);
+
+      return Response.json({
         success: true,
-        data: locations,
+        data: result.data,
+        pagination: result.pagination,
       });
     } catch (error) {
       return handleError(error);
     }
   },
-  async getById(id: string) {
+  async getById(id: string): Promise<Response> {
     try {
-      if (!isValidId(id)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "معرف المنطقة غير صالح",
-          },
-          { status: 400 },
-        );
-      }
+      const locationId = locationIdSchema.parse(id);
 
-      const location = await LocationService.getById(id);
+      const location = await LocationService.getById(locationId);
 
-      return NextResponse.json({
+      return Response.json({
         success: true,
         data: location,
       });
@@ -100,25 +125,15 @@ export const locationController = {
     }
   },
 
-  async create(request: Request) {
+  async create(request: Request): Promise<Response> {
     try {
       const body = await parseJson(request);
-      const parsed = createLocationSchema.safeParse(body);
 
-      if (!parsed.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "بيانات المنطقة غير صحيحة",
-            errors: parsed.error.flatten(),
-          },
-          { status: 400 },
-        );
-      }
+      const input = createLocationSchema.parse(body);
 
-      const location = await LocationService.create(parsed.data);
+      const location = await LocationService.create(input);
 
-      return NextResponse.json(
+      return Response.json(
         {
           success: true,
           message: "تمت إضافة المنطقة بنجاح",
@@ -131,38 +146,43 @@ export const locationController = {
     }
   },
 
-  async update(request: Request, id: string) {
+  async update(request: Request, id: string): Promise<Response> {
     try {
-      if (!isValidId(id)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "معرف المنطقة غير صالح",
-          },
-          { status: 400 },
-        );
-      }
+      const locationId = locationIdSchema.parse(id);
 
       const body = await parseJson(request);
-      const parsed = updateLocationSchema.safeParse(body);
 
-      if (!parsed.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "بيانات التعديل غير صحيحة",
-            errors: parsed.error.flatten(),
-          },
-          { status: 400 },
-        );
-      }
+      const input = updateLocationSchema.parse(body);
 
-      const location = await LocationService.update(id, parsed.data);
+      const location = await LocationService.update(locationId, input);
 
-      return NextResponse.json({
+      return Response.json({
         success: true,
         message: "تم تعديل المنطقة بنجاح",
         data: location,
+      });
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  async delete(request: Request, id: string): Promise<Response> {
+    try {
+      const locationId = locationIdSchema.parse(id);
+
+      const body = await parseJson(request);
+
+      const input = deleteLocationSchema.parse(body);
+
+      const result = await LocationService.delete(locationId, input);
+
+      return Response.json({
+        success: true,
+        message:
+          result.deletedPropertiesCount > 0
+            ? `تم حذف المنطقة و${result.deletedPropertiesCount} عقار مرتبط بها بنجاح`
+            : "تم حذف المنطقة بنجاح",
+        data: result,
       });
     } catch (error) {
       return handleError(error);

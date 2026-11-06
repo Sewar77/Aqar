@@ -1,152 +1,336 @@
 import { prisma } from "@/lib/prisma";
+
 import type {
+  ContactDto,
+  ContactListFilters,
   CreateContactInput,
   UpdateContactInput,
-  ContactListFilter,
 } from "./contact.types";
 
+export class ContactDeleteConflictError extends Error {}
+export class ContactNotFoundError extends Error {}
+
+const contactSelect = {
+  id: true,
+  fullName: true,
+  phone: true,
+  alternativePhone: true,
+  notes: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+type ContactRow = ContactDto;
+
+function normalizeSearchPhone(search: string) {
+  if (!/^[+0-9٠-٩۰-۹\s().-]+$/.test(search)) {
+    return "";
+  }
+
+  return search
+    .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0))
+    .replace(/[\s().-]/g, "");
+}
+
 export const contactRepository = {
-  findByPhone(phone: string) {
-    return prisma.contact.findUnique({
-      where: { phone },
-    });
-  },
-  findAll(filters: ContactListFilter) {
-    const { search, page, limit } = filters;
+  async findAll(filters: ContactListFilters): Promise<{
+    data: ContactDto[];
+    total: number;
+  }> {
+    const { page, limit, search = "" } = filters;
 
-    return prisma.contact.findMany({
-      where: {
-        ...(search && {
-          OR: [
-            {
-              fullName: {
-                contains: search,
-                mode: "insensitive" as const,
-              },
-            },
-            {
-              phone: {
-                contains: search,
-              },
-            },
-            {
-              alternativePhone: {
-                contains: search,
-              },
-            },
-          ],
-        }),
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-  },
+    const isActive = filters.isActive ?? null;
+    const phoneSearch = normalizeSearchPhone(search);
+    const offset = (page - 1) * limit;
 
-  count(filters: ContactListFilter) {
-    const { search } = filters;
+    type ContactPageRow = ContactDto & {
+      totalCount: number;
+    };
 
-    return prisma.contact.count({
-      where: {
-        ...(search && {
-          OR: [
-            {
-              fullName: {
-                contains: search,
-                mode: "insensitive" as const,
-              },
-            },
-            {
-              phone: {
-                contains: search,
-              },
-            },
-            {
-              alternativePhone: {
-                contains: search,
-              },
-            },
-          ],
-        }),
-      },
-    });
+    const rows = await prisma.$queryRaw<ContactPageRow[]>`
+    SELECT
+      c.id,
+      c.full_name AS "fullName",
+      c.phone,
+      c.alternative_phone AS "alternativePhone",
+      c.notes,
+      c.is_active AS "isActive",
+      c.created_at AS "createdAt",
+      c.updated_at AS "updatedAt",
+
+      (
+        SELECT COUNT(DISTINCT pc.property_id)::integer
+        FROM public.property_contacts AS pc
+        WHERE pc.contact_id = c.id
+      ) AS "propertyCount",
+
+      COUNT(*) OVER()::integer AS "totalCount"
+
+    FROM public.contacts AS c
+
+    WHERE
+      (
+        ${isActive}::boolean IS NULL
+        OR c.is_active = ${isActive}::boolean
+      )
+
+      AND (
+        ${search}::text = ''
+
+        OR strpos(
+          public.aqar_normalize_contact_name(c.full_name),
+          public.aqar_normalize_contact_name(
+            ${search}::text
+          )
+        ) > 0
+
+        OR (
+          ${phoneSearch}::text <> ''
+          AND (
+            strpos(
+              public.aqar_normalize_phone(c.phone),
+              ${phoneSearch}::text
+            ) > 0
+
+            OR strpos(
+              public.aqar_normalize_phone(
+                COALESCE(c.alternative_phone, '')
+              ),
+              ${phoneSearch}::text
+            ) > 0
+          )
+        )
+      )
+
+    ORDER BY
+      public.aqar_normalize_contact_name(c.full_name),
+      c.id
+
+    LIMIT ${limit}::integer
+    OFFSET ${offset}::integer
+  `;
+
+    let total = rows[0]?.totalCount ?? 0;
+
+    if (rows.length === 0 && page > 1) {
+      const counts = await prisma.$queryRaw<{ total: number }[]>`
+      SELECT COUNT(*)::integer AS total
+      FROM public.contacts AS c
+
+      WHERE
+        (
+          ${isActive}::boolean IS NULL
+          OR c.is_active = ${isActive}::boolean
+        )
+
+        AND (
+          ${search}::text = ''
+
+          OR strpos(
+            public.aqar_normalize_contact_name(c.full_name),
+            public.aqar_normalize_contact_name(
+              ${search}::text
+            )
+          ) > 0
+
+          OR (
+            ${phoneSearch}::text <> ''
+            AND (
+              strpos(
+                public.aqar_normalize_phone(c.phone),
+                ${phoneSearch}::text
+              ) > 0
+
+              OR strpos(
+                public.aqar_normalize_phone(
+                  COALESCE(c.alternative_phone, '')
+                ),
+                ${phoneSearch}::text
+              ) > 0
+            )
+          )
+        )
+    `;
+
+      total = counts[0]?.total ?? 0;
+    }
+
+    return {
+      data: rows.map(({ totalCount: _totalCount, ...contact }) => contact),
+      total,
+    };
   },
 
   findById(id: string) {
     return prisma.contact.findUnique({
       where: { id },
+      select: {
+        ...contactSelect,
 
-      include: {
         properties: {
           select: {
             role: true,
-            isPrimary: true,
-            canSharePhone: true,
-
             property: {
               select: {
                 id: true,
-                propertyCode: true,
                 title: true,
-                status: true,
-
-                location: {
-                  select: {
-                    nameAr: true,
-                  },
-                },
               },
             },
           },
-          orderBy: {
-            createdAt: "desc",
-          },
         },
       },
     });
   },
 
-  async countDistinctProperties(contactIds: string[]) {
-    if (contactIds.length === 0) {
-      return new Map<string, number>();
-    }
+  async findByPhone(phone: string, excludeId: string | null = null) {
+    const rows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id
+      FROM public.contacts
 
-    const relationships = await prisma.propertyContact.groupBy({
-      by: ["contactId", "propertyId"],
-      where: {
-        contactId: {
-          in: contactIds,
-        },
-      },
-    });
+      WHERE
+        public.aqar_normalize_phone(phone)
+        =
+        public.aqar_normalize_phone(
+          ${phone}::text
+        )
 
-    const counts = new Map<string, number>();
+        AND (
+          ${excludeId}::uuid IS NULL
+          OR id <> ${excludeId}::uuid
+        )
 
-    for (const relationship of relationships) {
-      const current = counts.get(relationship.contactId) ?? 0;
+      LIMIT 1
+    `;
 
-      counts.set(relationship.contactId, current + 1);
-    }
-
-    return counts;
+    return rows[0] ?? null;
   },
 
-  create(data: CreateContactInput) {
+  create(input: CreateContactInput) {
     return prisma.contact.create({
-      data,
+      data: {
+        fullName: input.fullName,
+        phone: input.phone,
+        alternativePhone: input.alternativePhone ?? null,
+        notes: input.notes ?? null,
+        isActive: true,
+      },
+      select: contactSelect,
     });
   },
 
-  update(id: string, data: UpdateContactInput) {
+  update(id: string, input: UpdateContactInput) {
     return prisma.contact.update({
       where: { id },
-      data,
+      data: {
+        ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
+
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+
+        ...(input.alternativePhone !== undefined
+          ? { alternativePhone: input.alternativePhone }
+          : {}),
+
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+      select: contactSelect,
     });
   },
 
-  delete(id: string) {
-    return prisma.contact.delete({
-      where: { id },
-    });
+  async deleteWithProperties(
+    contactId: string,
+    expectedName: string,
+    expectedPropertyIds: string[],
+  ) {
+    return prisma.$transaction(
+      async (tx) => {
+        // Lock the contact. Concurrent changes to
+        // its foreign-key relationships must wait.
+        const locked = await tx.$queryRaw<{ id: string; fullName: string }[]>`
+          SELECT id, full_name AS "fullName"
+          FROM public.contacts
+          WHERE id = ${contactId}::uuid
+          FOR UPDATE
+        `;
+
+        const contact = locked[0];
+
+        if (!contact) {
+          throw new ContactNotFoundError();
+        }
+
+        if (contact.fullName !== expectedName) {
+          throw new ContactDeleteConflictError(
+            "تغيّر اسم جهة الاتصال. راجعي البيانات مجددًا.",
+          );
+        }
+
+        const relationships = await tx.propertyContact.findMany({
+          where: {
+            contactId,
+          },
+          select: {
+            propertyId: true,
+          },
+        });
+
+        const actualIds = [
+          ...new Set(relationships.map((item) => item.propertyId)),
+        ].sort();
+
+        const expectedIds = [...expectedPropertyIds].sort();
+
+        if (
+          actualIds.length !== expectedIds.length ||
+          actualIds.some((id, index) => id !== expectedIds[index])
+        ) {
+          throw new ContactDeleteConflictError(
+            "تغيّرت العقارات المرتبطة بجهة الاتصال. راجعي قائمة الحذف مجددًا.",
+          );
+        }
+
+        let deletedPropertiesCount = 0;
+
+        if (actualIds.length > 0) {
+          const deleted = await tx.property.deleteMany({
+            where: {
+              id: {
+                in: actualIds,
+              },
+            },
+          });
+
+          if (deleted.count !== actualIds.length) {
+            throw new ContactDeleteConflictError(
+              "تغيّرت العقارات أثناء الحذف. لم تكتمل العملية.",
+            );
+          }
+
+          deletedPropertiesCount = deleted.count;
+        }
+
+        const deletedContact = await tx.contact.delete({
+          where: {
+            id: contactId,
+          },
+          select: {
+            id: true,
+            fullName: true,
+          },
+        });
+
+        return {
+          ...deletedContact,
+          deletedPropertiesCount,
+        };
+      },
+      {
+        maxWait: 10000,
+        timeout: 20000,
+      },
+    );
   },
 };

@@ -1,10 +1,18 @@
-import { contactRepository } from "./contact.repository";
+import { createPagination } from "@/lib/pagination";
 import {
-  ContactListFilter,
+  contactRepository,
+  ContactDeleteConflictError,
+  ContactNotFoundError,
+} from "./contact.repository";
+
+import type {
   CreateContactInput,
   UpdateContactInput,
+  ContactListFilters,
+  DeleteContactInput,
+  ContactDetailsDto,
 } from "./contact.types";
-import type { Contact } from "../../../generated/prisma/client";
+
 export class ContactServiceError extends Error {
   constructor(
     message: string,
@@ -14,111 +22,152 @@ export class ContactServiceError extends Error {
     this.name = "ContactServiceError";
   }
 }
-type ContactPropertyRelationship = {
-  property: {
-    id: string;
-  };
-};
+
+function normalizeOptionalText(value: string | null | undefined) {
+  if (value == null) return null;
+
+  return value.trim() || null;
+}
+
 export const contactService = {
-  async getAll(filters: ContactListFilter) {
-    const [contacts, total] = await Promise.all([
-      contactRepository.findAll(filters),
-      contactRepository.count(filters),
-    ]);
+  async getAll(filters: Partial<ContactListFilters> = {}) {
+    const query: ContactListFilters = {
+      page: filters.page ?? 1,
+      limit: filters.limit ?? 20,
+      search: filters.search,
+      isActive: filters.isActive,
+    };
 
-    const counts = await contactRepository.countDistinctProperties(
-      contacts.map((contact: Contact) => contact.id),
-    );
-
-    const data = contacts.map((contact: Contact) => ({
-      ...contact,
-      propertyCount: counts.get(contact.id) ?? 0,
-    }));
+    const result = await contactRepository.findAll(query);
 
     return {
-      data,
-      pagination: {
-        page: filters.page,
-        limit: filters.limit,
-        total,
-        totalPages: Math.ceil(total / filters.limit),
-      },
+      data: result.data,
+      pagination: createPagination(query.page, query.limit, result.total),
     };
   },
 
-  async getById(id: string) {
+  async getById(id: string): Promise<ContactDetailsDto> {
     const contact = await contactRepository.findById(id);
 
     if (!contact) {
       throw new ContactServiceError("جهة الاتصال غير موجودة", 404);
     }
 
-    const propertyCount = new Set(
-      contact.properties.map(
-        (relationship: ContactPropertyRelationship) => relationship.property.id,
-      ),
-    ).size;
+    // One person may have several roles in one
+    // property; display the property only once.
+    const uniqueProperties = new Map(
+      contact.properties.map(({ property }) => [
+        property.id,
+        {
+          id: property.id,
+          title: property.title,
+        },
+      ]),
+    );
+
+    const properties = [...uniqueProperties.values()].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
 
     return {
-      ...contact,
-      propertyCount,
+      id: contact.id,
+      fullName: contact.fullName,
+      phone: contact.phone,
+      alternativePhone: contact.alternativePhone,
+      notes: contact.notes,
+      isActive: contact.isActive,
+      createdAt: contact.createdAt,
+      updatedAt: contact.updatedAt,
+      propertyCount: properties.length,
+      properties,
     };
   },
 
   async create(input: CreateContactInput) {
-    const phone = input.phone.trim();
+    const alternativePhone = input.alternativePhone ?? null;
 
-    const existingContact = await contactRepository.findByPhone(phone);
-
-    if (existingContact) {
+    if (alternativePhone !== null && alternativePhone === input.phone) {
       throw new ContactServiceError(
-        "رقم الهاتف مسجل مسبقًا لجهة اتصال أخرى",
-        409,
+        "رقم الهاتف الإضافي يجب أن يختلف عن الرقم الأساسي",
+        400,
       );
     }
 
-    return contactRepository.create({
-      fullName: input.fullName.trim(),
-      phone,
-      alternativePhone: input.alternativePhone ?? null,
-      email: input.email ?? null,
-      notes: input.notes ?? null,
+    const duplicate = await contactRepository.findByPhone(input.phone);
+
+    if (duplicate) {
+      throw new ContactServiceError("رقم الهاتف الأساسي مسجل مسبقًا", 409);
+    }
+
+    const created = await contactRepository.create({
+      ...input,
+      alternativePhone,
+      notes: normalizeOptionalText(input.notes),
     });
+
+    return {
+      ...created,
+      propertyCount: 0,
+    };
   },
 
   async update(id: string, input: UpdateContactInput) {
-    await this.getById(id);
+    const existing = await this.getById(id);
+
+    const nextPhone = input.phone ?? existing.phone;
+
+    const nextAlternativePhone =
+      input.alternativePhone === undefined
+        ? existing.alternativePhone
+        : input.alternativePhone;
+
+    if (nextAlternativePhone !== null && nextAlternativePhone === nextPhone) {
+      throw new ContactServiceError(
+        "رقم الهاتف الإضافي يجب أن يختلف عن الرقم الأساسي",
+        400,
+      );
+    }
 
     if (input.phone !== undefined) {
-      const existingContact = await contactRepository.findByPhone(
-        input.phone.trim(),
-      );
+      const duplicate = await contactRepository.findByPhone(input.phone, id);
 
-      if (existingContact && existingContact.id !== id) {
+      if (duplicate) {
         throw new ContactServiceError(
-          "رقم الهاتف مسجل مسبقًا لجهة اتصال أخرى",
+          "رقم الهاتف الأساسي مسجل مسبقًا لجهة اتصال أخرى",
           409,
         );
       }
     }
 
-    return contactRepository.update(id, input);
+    await contactRepository.update(id, {
+      ...input,
+      ...(input.notes !== undefined
+        ? {
+            notes: normalizeOptionalText(input.notes),
+          }
+        : {}),
+    });
+
+    return this.getById(id);
   },
 
-  async delete(id: string) {
-    const contact = await this.getById(id);
-
-    if (contact.propertyCount > 0) {
-      throw new ContactServiceError(
-        "لا يمكن حذف جهة اتصال مرتبطة بعقارات. أزل ارتباطاتها أولًا.",
-        409,
+  async delete(id: string, input: DeleteContactInput) {
+    try {
+      return await contactRepository.deleteWithProperties(
+        id,
+        input.confirmName,
+        input.expectedPropertyIds,
       );
+    } catch (error) {
+      if (error instanceof ContactNotFoundError) {
+        throw new ContactServiceError("جهة الاتصال غير موجودة", 404);
+      }
+
+      if (error instanceof ContactDeleteConflictError) {
+        throw new ContactServiceError(error.message, 409);
+      }
+
+      throw error;
     }
-
-    await contactRepository.delete(id);
-
-    return {
-      message: "تم حذف جهة الاتصال بنجاح",
-    };
   },
 };

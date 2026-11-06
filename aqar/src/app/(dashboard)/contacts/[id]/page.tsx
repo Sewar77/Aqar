@@ -155,21 +155,6 @@ async function ContactDetailsContent({
                         </div>
                     )}
 
-                    {contact.email && (
-                        <div>
-                            <dt className="flex items-center gap-2 text-sm text-muted">
-                                <Mail size={16} aria-hidden="true" />
-                                البريد الإلكتروني
-                            </dt>
-
-                            <dd
-                                dir="ltr"
-                                className="mt-1 break-all text-right font-semibold"
-                            >
-                                {contact.email}
-                            </dd>
-                        </div>
-                    )}
 
                     {contact.notes && (
                         <div className="md:col-span-2">

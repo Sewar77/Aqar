@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // A reusable UUID validator.
 // All primary IDs in our schema use UUID.
-const uuid = z.uuid();
+const uuid = z.guid();
 
 // A reusable helper for optional text fields.
 // The caller may omit the field or explicitly send null.

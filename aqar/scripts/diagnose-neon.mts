@@ -48,13 +48,7 @@ async function main() {
 
     console.log("\n--- CONTACTS: ACTUAL SERVICE ---");
 
-    await measure("contactService.getAll", () =>
-      contactService.getAll({
-        search: undefined,
-        page: 1,
-        limit: 20,
-      }),
-    );
+    await measure("contactService.getAll", () => contactService.getAll({}));
 
     console.log("\n--- PROPERTIES: RELATIONS ---");
 
@@ -94,11 +88,7 @@ async function main() {
     console.log("\n--- SECOND REQUEST ---");
 
     await measure("contactService.getAll AGAIN", () =>
-      contactService.getAll({
-        search: undefined,
-        page: 1,
-        limit: 20,
-      }),
+      contactService.getAll({}),
     );
 
     console.log("\n--- COMPLETED ---");

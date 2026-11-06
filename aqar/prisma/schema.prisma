@@ -140,21 +140,26 @@ details Json @default("{}")
   @@map("properties")
 }
 
+
 model Contact {
   id               String   @id @default(uuid()) @db.Uuid
   fullName         String   @map("full_name")
-  phone            String @unique
+  phone            String   @unique
   alternativePhone String?  @map("alternative_phone")
   email            String?
   notes            String?
-  properties       PropertyContact[]
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  isActive         Boolean  @default(true) @map("is_active")
 
- 
+  properties PropertyContact[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   @@index([fullName])
+  @@index([isActive])
   @@map("contacts")
 }
+
 
 model PropertyContact {
   id            String              @id @default(uuid()) @db.Uuid

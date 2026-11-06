@@ -1,18 +1,19 @@
-import { NextResponse } from "next/server";
+import { Prisma } from "../../../generated/prisma/client";
+import { ZodError } from "zod";
 
 import { contactService, ContactServiceError } from "./contact.service";
+
 import {
+  contactIdSchema,
   contactListQuerySchema,
   createContactSchema,
   updateContactSchema,
+  deleteContactSchema,
 } from "./contact.validators";
 
-const isValidId = (id: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-function handleError(error: unknown) {
+function handleError(error: unknown): Response {
   if (error instanceof ContactServiceError) {
-    return NextResponse.json(
+    return Response.json(
       {
         success: false,
         message: error.message,
@@ -21,9 +22,43 @@ function handleError(error: unknown) {
     );
   }
 
-  if (typeof error === "object" && error !== null && "code" in error) {
+  if (error instanceof ZodError) {
+    return Response.json(
+      {
+        success: false,
+        message: "البيانات المدخلة غير صحيحة",
+        errors: error.issues.map((issue) => ({
+          path: issue.path,
+          message: issue.message,
+        })),
+      },
+      { status: 400 },
+    );
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return Response.json(
+        {
+          success: false,
+          message: "رقم الهاتف مسجل مسبقًا",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (error.code === "P2003") {
+      return Response.json(
+        {
+          success: false,
+          message: "تعذّر الحذف بسبب وجود علاقات مرتبطة. لم تكتمل العملية.",
+        },
+        { status: 409 },
+      );
+    }
+
     if (error.code === "P2025") {
-      return NextResponse.json(
+      return Response.json(
         {
           success: false,
           message: "جهة الاتصال غير موجودة",
@@ -31,129 +66,92 @@ function handleError(error: unknown) {
         { status: 404 },
       );
     }
-    if (error.code === "P2002") {
-      return NextResponse.json(
+
+    if (error.code === "P2028") {
+      console.error("Contacts transaction error:", error);
+
+      return Response.json(
         {
           success: false,
-          message: "رقم الهاتف مسجل مسبقًا لجهة اتصال أخرى",
+          message:
+            "تعذّر إتمام العملية بسبب الاتصال بقاعدة البيانات. تحققي من السجلات قبل إعادة المحاولة.",
         },
-        { status: 409 },
-      );
-    }
-    if (error.code === "P2003") {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "لا يمكن حذف جهة اتصال مرتبطة بعقارات",
-        },
-        { status: 409 },
+        { status: 503 },
       );
     }
   }
 
-  console.error("Contact module error:", error);
+  console.error("Contacts API error:", error);
 
-  return NextResponse.json(
+  return Response.json(
     {
       success: false,
-      message: "حدث خطأ غير متوقع في الخادم",
+      message: "حدث خطأ في الخادم. تحققي من البيانات قبل إعادة المحاولة.",
     },
     { status: 500 },
   );
 }
 
-async function parseJson(request: Request) {
+async function parseBody(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch {
-    throw new ContactServiceError("البيانات المرسلة ليست JSON صالحًا", 400);
+    throw new ContactServiceError("يرجى إرسال بيانات JSON صحيحة", 400);
   }
 }
 
-function invalidIdResponse() {
-  return NextResponse.json(
-    {
-      success: false,
-      message: "معرف جهة الاتصال غير صالح",
-    },
-    { status: 400 },
-  );
-}
-
 export const contactController = {
-  async getAll(request: Request) {
+  async getAll(request: Request): Promise<Response> {
     try {
-      const { searchParams } = new URL(request.url);
+      const params = new URL(request.url).searchParams;
 
-      const parsed = contactListQuerySchema.safeParse({
-        search: searchParams.get("search") ?? undefined,
-        page: searchParams.get("page") ?? undefined,
-        limit: searchParams.get("limit") ?? undefined,
+      const filters = contactListQuerySchema.parse({
+        search: params.get("search") ?? undefined,
+        isActive: params.get("isActive") ?? undefined,
+        page: params.get("page") ?? undefined,
+        limit: params.get("limit") ?? undefined,
       });
 
-      if (!parsed.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "معايير البحث غير صحيحة",
-            errors: parsed.error.flatten(),
-          },
-          { status: 400 },
-        );
-      }
+      const result = await contactService.getAll(filters);
 
-      const result = await contactService.getAll(parsed.data);
-
-      return NextResponse.json({
+      return Response.json({
         success: true,
-        ...result,
+        data: result.data,
+        pagination: result.pagination,
       });
     } catch (error) {
       return handleError(error);
     }
   },
 
-  async getById(id: string) {
+  async getById(id: string): Promise<Response> {
     try {
-      if (!isValidId(id)) {
-        return invalidIdResponse();
-      }
+      const contactId = contactIdSchema.parse(id);
 
-      const contact = await contactService.getById(id);
+      const data = await contactService.getById(contactId);
 
-      return NextResponse.json({
+      return Response.json({
         success: true,
-        data: contact,
+        data,
       });
     } catch (error) {
       return handleError(error);
     }
   },
 
-  async create(request: Request) {
+  async create(request: Request): Promise<Response> {
     try {
-      const body = await parseJson(request);
+      const body = await parseBody(request);
 
-      const parsed = createContactSchema.safeParse(body);
+      const input = createContactSchema.parse(body);
 
-      if (!parsed.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "بيانات جهة الاتصال غير صحيحة",
-            errors: parsed.error.flatten(),
-          },
-          { status: 400 },
-        );
-      }
+      const data = await contactService.create(input);
 
-      const contact = await contactService.create(parsed.data);
-
-      return NextResponse.json(
+      return Response.json(
         {
           success: true,
           message: "تمت إضافة جهة الاتصال بنجاح",
-          data: contact,
+          data,
         },
         { status: 201 },
       );
@@ -162,50 +160,45 @@ export const contactController = {
     }
   },
 
-  async update(request: Request, id: string) {
+  async update(request: Request, id: string): Promise<Response> {
     try {
-      if (!isValidId(id)) {
-        return invalidIdResponse();
-      }
+      const contactId = contactIdSchema.parse(id);
 
-      const body = await parseJson(request);
+      const body = await parseBody(request);
 
-      const parsed = updateContactSchema.safeParse(body);
+      const input = updateContactSchema.parse(body);
 
-      if (!parsed.success) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "بيانات التعديل غير صحيحة",
-            errors: parsed.error.flatten(),
-          },
-          { status: 400 },
-        );
-      }
+      const data = await contactService.update(contactId, input);
 
-      const contact = await contactService.update(id, parsed.data);
-
-      return NextResponse.json({
+      return Response.json({
         success: true,
         message: "تم تعديل جهة الاتصال بنجاح",
-        data: contact,
+        data,
       });
     } catch (error) {
       return handleError(error);
     }
   },
 
-  async delete(id: string) {
+  async delete(request: Request, id: string): Promise<Response> {
     try {
-      if (!isValidId(id)) {
-        return invalidIdResponse();
-      }
+      const contactId = contactIdSchema.parse(id);
 
-      const result = await contactService.delete(id);
+      const body = await parseBody(request);
 
-      return NextResponse.json({
+      const input = deleteContactSchema.parse(body);
+
+      const result = await contactService.delete(contactId, input);
+
+      return Response.json({
         success: true,
-        ...result,
+
+        message:
+          result.deletedPropertiesCount > 0
+            ? `تم حذف جهة الاتصال و${result.deletedPropertiesCount} عقار مرتبط بها`
+            : "تم حذف جهة الاتصال بنجاح",
+
+        data: result,
       });
     } catch (error) {
       return handleError(error);
