@@ -376,11 +376,7 @@ async function Content({ params }: PageProps) {
     notFound();
   }
 
-  // Owner information is private.
-  // Block public production access until ADMIN auth exists.
-  if (process.env.NODE_ENV === "production") {
-    notFound();
-  }
+
 
   const property = await prisma.property.findUnique({
     where: { id },
